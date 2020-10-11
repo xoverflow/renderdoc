@@ -40,10 +40,10 @@ LibraryHook::LibraryHook()
 void LibraryHooks::RegisterHooks()
 {
   BeginHookRegistration();
-
   for(LibraryHook *lib : LibList())
+  {
     lib->RegisterHooks();
-
+  }
   EndHookRegistration();
 }
 

@@ -28,6 +28,7 @@
 #include "serialise/serialiser.h"
 #include "d3d8_debug.h"
 #include "d3d8_resources.h"
+#include "hooks/dxgi_hook/D3D8HookClient.hpp"
 
 WrappedD3DDevice8::WrappedD3DDevice8(IDirect3DDevice8 *device, HWND wnd,
                                      D3DPRESENT_PARAMETERS *pPresentationParameters)
@@ -249,6 +250,9 @@ HRESULT __stdcall WrappedD3DDevice8::Present(CONST RECT *pSourceRect, CONST RECT
 
   m_FrameCounter++;
 
+  //WinHook::D3D8HookClient::Get().Logger.AppendBufferF(
+  //    "Active: %d, Bg: %d, Tri: %d\n", IsActiveCapturing(m_State), IsBackgroundCapturing(m_State),
+  //    RenderDoc::Inst().ShouldTriggerCapture(m_FrameCounter));
   // if (m_State == WRITING_IDLE)
   {
     uint32_t overlay = RenderDoc::Inst().GetOverlayBits();
@@ -291,6 +295,8 @@ HRESULT __stdcall WrappedD3DDevice8::Present(CONST RECT *pSourceRect, CONST RECT
   }
 
   RenderDoc::Inst().AddActiveDriver(RDCDriver::D3D8, true);
+
+  WinHook::D3D8HookClient::Get().IsCapturing = RenderDoc::Inst().ShouldTriggerCapture(m_FrameCounter);
 
   return m_device->Present(pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
 }
@@ -346,11 +352,10 @@ HRESULT __stdcall WrappedD3DDevice8::CreateVertexBuffer(UINT Length, DWORD Usage
   IDirect3DVertexBuffer8 *real = NULL;
   IDirect3DVertexBuffer8 *wrapped = NULL;
   HRESULT ret = m_device->CreateVertexBuffer(Length, Usage, FVF, Pool, &real);
-
+  WinHook::D3D8HookClient::Get().OnCreateVertexBuffer(Length, Usage, FVF, Pool, &real);
   if(SUCCEEDED(ret))
   {
     SCOPED_LOCK(m_D3DLock);
-
     wrapped = new WrappedIDirect3DVertexBuffer8(real, Length, this);
 
     if(IsCaptureMode(m_State))
@@ -377,7 +382,7 @@ HRESULT __stdcall WrappedD3DDevice8::CreateIndexBuffer(UINT Length, DWORD Usage,
   IDirect3DIndexBuffer8 *real = NULL;
   IDirect3DIndexBuffer8 *wrapped = NULL;
   HRESULT ret = m_device->CreateIndexBuffer(Length, Usage, Format, Pool, &real);
-
+  WinHook::D3D8HookClient::Get().OnCreateIndexBuffer(Length, Usage, Format, Pool, &real);
   if(SUCCEEDED(ret))
   {
     SCOPED_LOCK(m_D3DLock);
@@ -460,11 +465,13 @@ HRESULT __stdcall WrappedD3DDevice8::GetDepthStencilSurface(IDirect3DSurface8 **
 
 HRESULT __stdcall WrappedD3DDevice8::BeginScene()
 {
+  WinHook::D3D8HookClient::Get().OnBeginScene();
   return m_device->BeginScene();
 }
 
 HRESULT __stdcall WrappedD3DDevice8::EndScene()
 {
+  WinHook::D3D8HookClient::Get().OnEndScene();
   return m_device->EndScene();
 }
 
@@ -648,6 +655,7 @@ HRESULT __stdcall WrappedD3DDevice8::GetCurrentTexturePalette(UINT *PaletteNumbe
 HRESULT __stdcall WrappedD3DDevice8::DrawPrimitive(D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex,
                                                    UINT PrimitiveCount)
 {
+  WinHook::D3D8HookClient::Get().OnDrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
   return m_device->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount);
 }
 
@@ -655,6 +663,8 @@ HRESULT __stdcall WrappedD3DDevice8::DrawIndexedPrimitive(D3DPRIMITIVETYPE _arg1
                                                           UINT MinVertexIndex, UINT NumVertices,
                                                           UINT startIndex, UINT primCount)
 {
+  WinHook::D3D8HookClient::Get().OnDrawIndexedPrimitive(_arg1, MinVertexIndex, NumVertices,
+                                                        startIndex, primCount);
   return m_device->DrawIndexedPrimitive(_arg1, MinVertexIndex, NumVertices, startIndex, primCount);
 }
 
@@ -663,6 +673,8 @@ HRESULT __stdcall WrappedD3DDevice8::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveT
                                                      CONST void *pVertexStreamZeroData,
                                                      UINT VertexStreamZeroStride)
 {
+  WinHook::D3D8HookClient::Get().OnDrawPrimitiveUP(PrimitiveType, PrimitiveCount,
+                                                   pVertexStreamZeroData, VertexStreamZeroStride);
   return m_device->DrawPrimitiveUP(PrimitiveType, PrimitiveCount, pVertexStreamZeroData,
                                    VertexStreamZeroStride);
 }
@@ -672,6 +684,9 @@ HRESULT __stdcall WrappedD3DDevice8::DrawIndexedPrimitiveUP(
     CONST void *pIndexData, D3DFORMAT IndexDataFormat, CONST void *pVertexStreamZeroData,
     UINT VertexStreamZeroStride)
 {
+  WinHook::D3D8HookClient::Get().OnDrawIndexedPrimitiveUP(
+      PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat,
+      pVertexStreamZeroData, VertexStreamZeroStride);
   return m_device->DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices,
                                           PrimitiveCount, pIndexData, IndexDataFormat,
                                           pVertexStreamZeroData, VertexStreamZeroStride);
@@ -688,11 +703,13 @@ HRESULT __stdcall WrappedD3DDevice8::CreateVertexShader(CONST DWORD *pDeclaratio
                                                         CONST DWORD *pFunction, DWORD *pHandle,
                                                         DWORD Usage)
 {
+  WinHook::D3D8HookClient::Get().OnCreateVertexShader(pDeclaration, pFunction, pHandle, Usage);
   return m_device->CreateVertexShader(pDeclaration, pFunction, pHandle, Usage);
 }
 
 HRESULT __stdcall WrappedD3DDevice8::SetVertexShader(DWORD Handle)
 {
+  WinHook::D3D8HookClient::Get().OnSetVertexShader(Handle);
   return m_device->SetVertexShader(Handle);
 }
 
@@ -734,6 +751,7 @@ HRESULT __stdcall WrappedD3DDevice8::GetVertexShaderFunction(DWORD Handle, void 
 HRESULT __stdcall WrappedD3DDevice8::SetStreamSource(UINT StreamNumber,
                                                      IDirect3DVertexBuffer8 *pStreamData, UINT Stride)
 {
+  WinHook::D3D8HookClient::Get().OnSetStreamSource(StreamNumber, Unwrap(pStreamData), Stride);
   return m_device->SetStreamSource(StreamNumber, Unwrap(pStreamData), Stride);
 }
 
@@ -757,6 +775,7 @@ HRESULT __stdcall WrappedD3DDevice8::GetStreamSource(UINT StreamNumber,
 HRESULT __stdcall WrappedD3DDevice8::SetIndices(IDirect3DIndexBuffer8 *pIndexData,
                                                 UINT BaseVertexIndex)
 {
+  WinHook::D3D8HookClient::Get().OnSetIndices(Unwrap(pIndexData), BaseVertexIndex);
   return m_device->SetIndices(Unwrap(pIndexData), BaseVertexIndex);
 }
 
@@ -778,11 +797,13 @@ HRESULT __stdcall WrappedD3DDevice8::GetIndices(IDirect3DIndexBuffer8 **ppIndexD
 
 HRESULT __stdcall WrappedD3DDevice8::CreatePixelShader(CONST DWORD *pFunction, DWORD *pHandle)
 {
+  WinHook::D3D8HookClient::Get().OnCreatePixelShader(pFunction, pHandle);
   return m_device->CreatePixelShader(pFunction, pHandle);
 }
 
 HRESULT __stdcall WrappedD3DDevice8::SetPixelShader(DWORD Handle)
 {
+  WinHook::D3D8HookClient::Get().OnSetPixelShader(Handle);
   return m_device->SetPixelShader(Handle);
 }
 
@@ -817,12 +838,14 @@ HRESULT __stdcall WrappedD3DDevice8::GetPixelShaderFunction(DWORD Handle, void *
 HRESULT __stdcall WrappedD3DDevice8::DrawRectPatch(UINT Handle, CONST float *pNumSegs,
                                                    CONST D3DRECTPATCH_INFO *pRectPatchInfo)
 {
+  WinHook::D3D8HookClient::Get().OnDrawRectPatch(Handle, pNumSegs, pRectPatchInfo);
   return m_device->DrawRectPatch(Handle, pNumSegs, pRectPatchInfo);
 }
 
 HRESULT __stdcall WrappedD3DDevice8::DrawTriPatch(UINT Handle, CONST float *pNumSegs,
                                                   CONST D3DTRIPATCH_INFO *pTriPatchInfo)
 {
+  WinHook::D3D8HookClient::Get().OnDrawTriPatch(Handle, pNumSegs, pTriPatchInfo);
   return m_device->DrawTriPatch(Handle, pNumSegs, pTriPatchInfo);
 }
 
